@@ -256,6 +256,13 @@ typedef enum cyaml_flag {
 	 *       \ref cyaml_strval strings.
 	 */
 	CYAML_FLAG_CASE_INSENSITIVE = (1 << 8),
+	/**
+	 * note: added by Aerospike, differs from the original implementation
+	 *
+	 * When this field is optional and not specified, it is set to -1
+	 * (as opposed to 0)
+	 */
+	CYAML_FLAG_DEFAULT_ONES = (1 << 9),
 } cyaml_flag_e;
 
 /**

@@ -866,6 +866,42 @@ static uint16_t cyaml__get_mapping_field_count(
 }
 
 /**
+ * Load all default values in the mapping if they weren't set
+ *
+ * Current CYAML load state must be \ref CYAML_STATE_IN_MAP_KEY.
+ *
+ * \param[in]  ctx     The CYAML loading context.
+ * \return \ref CYAML_OK if all required fields are present, or
+ *         \ref CYAML_ERR_MAPPING_FIELD_MISSING any are missing.
+ */
+static cyaml_err_t cyaml__mapping_load_defaults(
+		const cyaml_ctx_t *ctx)
+{
+	cyaml_state_t *state = ctx->state;
+	unsigned count = state->mapping.fields_count;
+
+	for (unsigned i = 0; i < count; i++) {
+		// if this is an optional field with default ones and it hasn't been set,
+		// then set the field to all 1's
+		if ((state->mapping.fields[i].value.flags & CYAML_FLAG_OPTIONAL) &&
+				!(state->mapping.fields_set[i / CYAML_BITFIELD_BITS] &
+					(1u << (i % CYAML_BITFIELD_BITS))) &&
+				(state->mapping.fields[i].value.flags & CYAML_FLAG_DEFAULT_ONES)) {
+
+			const cyaml_schema_field_t* field = &state->mapping.fields[i];
+			cyaml_data_t* data = state->data + field->data_offset;
+			cyaml_err_t err = cyaml_data_write(-1LU, field->value.data_size, data);
+
+			if (err != CYAML_OK) {
+				return err;
+			}
+		}
+	}
+
+	return CYAML_OK;
+}
+
+/**
  * Create \ref CYAML_STATE_IN_MAP_KEY state's bitfield array allocation.
  *
  * The bitfield is used to record whether the mapping as all the required
@@ -875,7 +911,7 @@ static uint16_t cyaml__get_mapping_field_count(
  * \param[in]  state  CYAML load state for a \ref CYAML_STATE_IN_MAP_KEY state.
  * \return \ref CYAML_OK on success, or appropriate error code otherwise.
  */
-static cyaml_err_t cyaml__mapping_bitfieid_create(
+static cyaml_err_t cyaml__mapping_bitfield_create(
 		cyaml_ctx_t *ctx,
 		cyaml_state_t *state)
 {
@@ -903,7 +939,7 @@ static cyaml_err_t cyaml__mapping_bitfieid_create(
  * \param[in]  ctx    The CYAML loading context.
  * \param[in]  state  CYAML load state for a \ref CYAML_STATE_IN_MAP_KEY state.
  */
-static void cyaml__mapping_bitfieid_destroy(
+static void cyaml__mapping_bitfield_destroy(
 		const cyaml_ctx_t *ctx,
 		cyaml_state_t *state)
 {
@@ -918,7 +954,7 @@ static void cyaml__mapping_bitfieid_destroy(
  *
  * \param[in]  ctx     The CYAML loading context.
  */
-static void cyaml__mapping_bitfieid_set(
+static void cyaml__mapping_bitfield_set(
 		const cyaml_ctx_t *ctx)
 {
 	cyaml_state_t *state = ctx->state;
@@ -935,7 +971,7 @@ static void cyaml__mapping_bitfieid_set(
  *
  * \param[in]  ctx     The CYAML loading context.
  */
-static bool cyaml__mapping_bitfieid_check(
+static bool cyaml__mapping_bitfield_check(
 		const cyaml_ctx_t *ctx)
 {
 	cyaml_state_t *state = ctx->state;
@@ -958,7 +994,7 @@ static bool cyaml__mapping_bitfieid_check(
  * \return \ref CYAML_OK if all required fields are present, or
  *         \ref CYAML_ERR_MAPPING_FIELD_MISSING any are missing.
  */
-static cyaml_err_t cyaml__mapping_bitfieid_validate(
+static cyaml_err_t cyaml__mapping_bitfield_validate(
 		const cyaml_ctx_t *ctx)
 {
 	cyaml_state_t *state = ctx->state;
@@ -1027,7 +1063,7 @@ static cyaml_err_t cyaml__stack_push(
 		s.mapping.fields = schema->mapping.fields;
 		s.mapping.fields_count = cyaml__get_mapping_field_count(
 				schema->mapping.fields);
-		err = cyaml__mapping_bitfieid_create(ctx, &s);
+		err = cyaml__mapping_bitfield_create(ctx, &s);
 		if (err != CYAML_OK) {
 			return err;
 		}
@@ -1088,7 +1124,7 @@ static void cyaml__stack_pop(
 	switch (ctx->state->state) {
 	case CYAML_STATE_IN_MAP_KEY: /* Fall through. */
 	case CYAML_STATE_IN_MAP_VALUE:
-		cyaml__mapping_bitfieid_destroy(ctx, ctx->state);
+		cyaml__mapping_bitfield_destroy(ctx, ctx->state);
 		break;
 	default:
 		break;
@@ -2194,7 +2230,7 @@ static cyaml_err_t cyaml__map_key_check_field(
 			ctx->state->mapping.fields_idx;
 
 	if (field->value.type != CYAML_IGNORE) {
-		if (cyaml__mapping_bitfieid_check(ctx) == true) {
+		if (cyaml__mapping_bitfield_check(ctx) == true) {
 			cyaml__log(ctx->config, CYAML_LOG_ERROR,
 				"Load: Mapping field already seen: %s\n",
 					field->key);
@@ -2202,7 +2238,7 @@ static cyaml_err_t cyaml__map_key_check_field(
 		}
 	}
 
-	cyaml__mapping_bitfieid_set(ctx);
+	cyaml__mapping_bitfield_set(ctx);
 
 	return CYAML_OK;
 }
@@ -2273,7 +2309,12 @@ static cyaml_err_t cyaml__map_end(
 
 	CYAML_UNUSED(event);
 
-	err = cyaml__mapping_bitfieid_validate(ctx);
+	err = cyaml__mapping_load_defaults(ctx);
+	if (err != CYAML_OK) {
+		return err;
+	}
+
+	err = cyaml__mapping_bitfield_validate(ctx);
 	if (err != CYAML_OK) {
 		return err;
 	}
