@@ -5117,6 +5117,159 @@ static bool test_load_mapping_only_optional_fields(
 }
 
 /**
+ * Test loading a mapping with optional fields, where some of the optional
+ * fields have a default value of -1
+ *
+ * \param[in]  report  The test report context.
+ * \param[in]  config  The CYAML config to use for the test.
+ * \return true if test passes, false otherwise.
+ */
+static bool test_load_mapping_with_optional_default_1_fields(
+		ttest_report_ctx_t *report,
+		const cyaml_config_t *config)
+{
+	long values[] = { 4, 3, 2, 1 };
+	const struct target_struct {
+		char *a;
+		char b[10];
+		int c;
+		long d[4];
+		long *e;
+		unsigned e_count;
+		char *f;
+		char *g;
+		char h[10];
+		int i;
+		long j[4];
+		long *k;
+		unsigned k_count;
+	} data = {
+		.a = (char *) "Hello",
+		.b = "World!",
+		.c = -1,
+		.d = { 0, 0, 0, 0 },
+		.e = values,
+		.f = (char *) "Required!",
+		.g = NULL,
+		.h = "\0",
+		.i = 9876,
+		.j = { 1, 2, 3, 4 },
+		.k = NULL,
+	};
+	static const unsigned char yaml[] =
+		"a: Hello\n"
+		"b: World!\n"
+		"e: [ 4, 3, 2, 1 ]\n"
+		"f: Required!\n"
+		"i: 9876\n"
+		"j: [ 1, 2, 3, 4 ]\n";
+	struct target_struct *data_tgt = NULL;
+	static const struct cyaml_schema_value sequence_entry = {
+		CYAML_VALUE_INT(CYAML_FLAG_DEFAULT, sizeof(long)),
+	};
+	static const struct cyaml_schema_field mapping_schema[] = {
+		CYAML_FIELD_STRING_PTR("a",
+				CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL,
+				struct target_struct, a, 0, CYAML_UNLIMITED),
+		CYAML_FIELD_STRING("b", CYAML_FLAG_OPTIONAL,
+				struct target_struct, b, 0),
+		CYAML_FIELD_INT("c", CYAML_FLAG_OPTIONAL | CYAML_FLAG_DEFAULT_ONES,
+				struct target_struct, c),
+		CYAML_FIELD_SEQUENCE_FIXED("d", CYAML_FLAG_OPTIONAL,
+				struct target_struct, d, &sequence_entry, 4),
+		CYAML_FIELD_SEQUENCE("e",
+				CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL,
+				struct target_struct, e, &sequence_entry,
+				0, CYAML_UNLIMITED),
+		CYAML_FIELD_STRING_PTR("f",
+				CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL,
+				struct target_struct, f, 0, CYAML_UNLIMITED),
+		CYAML_FIELD_STRING_PTR("g",
+				CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL,
+				struct target_struct, g, 0, CYAML_UNLIMITED),
+		CYAML_FIELD_STRING("h", CYAML_FLAG_OPTIONAL,
+				struct target_struct, h, 0),
+		CYAML_FIELD_INT("i", CYAML_FLAG_OPTIONAL,
+				struct target_struct, i),
+		CYAML_FIELD_SEQUENCE_FIXED("j", CYAML_FLAG_OPTIONAL,
+				struct target_struct, j, &sequence_entry, 4),
+		CYAML_FIELD_SEQUENCE("k",
+				CYAML_FLAG_POINTER | CYAML_FLAG_OPTIONAL,
+				struct target_struct, k, &sequence_entry,
+				0, CYAML_UNLIMITED),
+		CYAML_FIELD_END
+	};
+	static const struct cyaml_schema_value top_schema = {
+		CYAML_VALUE_MAPPING(CYAML_FLAG_POINTER,
+				struct target_struct, mapping_schema),
+	};
+	test_data_t td = {
+		.data = (cyaml_data_t **) &data_tgt,
+		.config = config,
+		.schema = &top_schema,
+	};
+	cyaml_err_t err;
+
+	ttest_ctx_t tc = ttest_start(report, __func__, cyaml_cleanup, &td);
+
+	err = cyaml_load_data(yaml, YAML_LEN(yaml), config, &top_schema,
+			(cyaml_data_t **) &data_tgt, NULL);
+	if (err != CYAML_OK) {
+		return ttest_fail(&tc, cyaml_strerror(err));
+	}
+
+	if (strcmp(data_tgt->a, data.a) != 0) {
+		return ttest_fail(&tc, "Incorrect value for entry a: "
+				"Expected: %s, got: %s",
+				data.a, data_tgt->a);
+	}
+	if (strcmp(data_tgt->b, data.b) != 0) {
+		return ttest_fail(&tc, "Incorrect value for entry b");
+	}
+	if (data_tgt->c != data.c) {
+		return ttest_fail(&tc, "Incorrect value for entry c");
+	}
+	for (unsigned i = 0; i < 4; i++) {
+		if (data_tgt->d[i] != data.d[i]) {
+			return ttest_fail(&tc, "Incorrect value for entry d");
+		}
+	}
+	for (unsigned i = 0; i < 4; i++) {
+		if (data_tgt->e[i] != data.e[i]) {
+			return ttest_fail(&tc, "Incorrect value for entry e "
+					"Index: %u: Expected: %ld, got: %ld",
+					i, data.e[i], data_tgt->e[i]);
+		}
+	}
+	if (strcmp(data_tgt->f, data.f) != 0) {
+		return ttest_fail(&tc, "Incorrect value for entry f: "
+				"Expected: %s, got: %s",
+				data.f, data_tgt->f);
+	}
+	if (data_tgt->g != data.g) {
+		return ttest_fail(&tc, "Incorrect value for entry g: "
+				"Expected: %s, got: %s",
+				data.g, data_tgt->g);
+	}
+	if (strcmp(data_tgt->h, data.h) != 0) {
+		return ttest_fail(&tc, "Incorrect value for entry h");
+	}
+	if (data_tgt->i != data.i) {
+		return ttest_fail(&tc, "Incorrect value for entry i");
+	}
+	for (unsigned i = 0; i < 4; i++) {
+		if (data_tgt->j[i] != data.j[i]) {
+			return ttest_fail(&tc, "Incorrect value for entry j");
+		}
+	}
+	if (data_tgt->k != data.k) {
+		return ttest_fail(&tc, "Incorrect value for entry k");
+	}
+
+	return ttest_pass(&tc);
+}
+
+/**
  * Test loading a mapping with only optional fields.
  *
  * \param[in]  report  The test report context.
@@ -6757,6 +6910,7 @@ bool load_tests(
 	pass &= test_load_mapping_with_multiple_fields(rc, &config);
 	pass &= test_load_mapping_with_optional_fields(rc, &config);
 	pass &= test_load_mapping_only_optional_fields(rc, &config);
+	pass &= test_load_mapping_with_optional_default_1_fields(rc, &config);
 	pass &= test_load_mapping_ignored_unknown_keys(rc, &config);
 	pass &= test_load_sequence_without_max_entries(rc, &config);
 	pass &= test_load_schema_top_level_sequence_fixed(rc, &config);

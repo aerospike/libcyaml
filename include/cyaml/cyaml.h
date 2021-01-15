@@ -261,6 +261,8 @@ typedef enum cyaml_flag {
 	 *
 	 * When this field is optional and not specified, it is set to -1
 	 * (as opposed to 0)
+	 *
+	 * This has no effect if CYAML_FLAG_OPTIONAL is not set
 	 */
 	CYAML_FLAG_DEFAULT_ONES = (1 << 9),
 } cyaml_flag_e;
