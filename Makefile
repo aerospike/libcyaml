@@ -26,12 +26,20 @@ else
 $(error VARIANT must be 'debug' (default), 'san', or 'release')
 endif
 
+UNAME_S := $(shell uname -s)
+
 LIB_NAME = libcyaml
 LIB_PKGCON = $(LIB_NAME).pc
 LIB_STATIC = $(LIB_NAME).a
-LIB_SHARED = $(LIB_NAME).so
-LIB_SH_MAJ = $(LIB_SHARED).$(VERSION_MAJOR)
-LIB_SH_VER = $(LIB_SHARED).$(VERSION_STR)
+ifeq ($(UNAME_S),Darwin)
+  LIB_SHARED = $(LIB_NAME).dylib
+  LIB_SH_MAJ = $(LIB_NAME).$(VERSION_MAJOR).dylib
+  LIB_SH_VER = $(LIB_NAME).$(VERSION_STR).dylib
+else
+  LIB_SHARED = $(LIB_NAME).so
+  LIB_SH_MAJ = $(LIB_SHARED).$(VERSION_MAJOR)
+  LIB_SH_VER = $(LIB_SHARED).$(VERSION_STR)
+endif
 
 .IMPLICIT =
 
@@ -58,7 +66,12 @@ INCLUDE = -I include
 CFLAGS += $(INCLUDE) $(VERSION_FLAGS) $(LIBYAML_CFLAGS)
 CFLAGS += -std=c11 -Wall -Wextra -pedantic -Wconversion -Wwrite-strings
 LDFLAGS += $(LIBYAML_LIBS)
-LDFLAGS_SHARED += -Wl,-soname=$(LIB_SH_MAJ) -shared
+
+ifeq ($(UNAME_S),Darwin)
+  LDFLAGS_SHARED += -dynamiclib -install_name "$(LIB_SH_MAJ)" -current_version $(VERSION_STR)
+else
+  LDFLAGS_SHARED += -Wl,-soname=$(LIB_SH_MAJ) -shared
+endif
 
 ifeq ($(VARIANT), debug)
 	CFLAGS += -O0 -g
